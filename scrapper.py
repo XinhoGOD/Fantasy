@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 from datetime import datetime
 from typing import List, Dict, Any
 import re
@@ -28,7 +29,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from bs4 import BeautifulSoup
-import pandas as pd
 
 # Intentar cargar python-dotenv, pero no es obligatorio para GitHub Actions
 try:
