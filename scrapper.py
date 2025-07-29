@@ -480,6 +480,7 @@ class SupabaseManager:
     def detect_player_changes_v2(self, new_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         🔥 NUEVA VERSIÓN: Detecta cambios comparando cada jugador con su último registro individual.
+        🎯 ACTUALIZADO: Solo registra cambios en rostered/started, IGNORA adds/drops
         
         Args:
             new_data: Datos actuales del scraping
@@ -553,6 +554,7 @@ class SupabaseManager:
     def has_significant_changes(self, old_player: Dict[str, Any], new_player: Dict[str, Any]) -> bool:
         """
         Determina si un jugador tuvo cambios significativos.
+        🔥 ACTUALIZADO: Solo detecta cambios en rostered/started, IGNORA adds/drops
         
         Args:
             old_player: Datos anteriores del jugador
@@ -561,14 +563,12 @@ class SupabaseManager:
         Returns:
             True si hay cambios significativos
         """
-        # Campos a monitorear para cambios
+        # 🎯 CAMPOS ESPECÍFICOS: Solo rostered y started (ignora adds/drops)
         fields_to_check = [
             'percent_rostered',
             'percent_rostered_change',
             'percent_started', 
-            'percent_started_change',
-            'adds',
-            'drops'
+            'percent_started_change'
         ]
         
         changes_detected = []
@@ -587,7 +587,11 @@ class SupabaseManager:
         
         if changes_detected:
             player_name = new_player.get('player_name', 'Unknown')
-            self.logger.debug(f"🔄 Cambios en {player_name}: {len(changes_detected)} campos modificados")
+            self.logger.info(f"🔄 Cambios detectados en {player_name}: {len(changes_detected)} campos modificados")
+            for change in changes_detected:
+                self.logger.info(f"   • {change['field']}: {change['old_value']} → {change['new_value']}")
+            
+        return len(changes_detected) > 0
             
         return len(changes_detected) > 0
     
