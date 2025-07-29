@@ -1,0 +1,41 @@
+# NFL Fantasy Scraper - Dependencias optimizadas para GitHub Actions 24/7
+# Versiones específicas para máxima estabilidad y velocidad de instalación
+
+# ========================================
+# CORE WEB SCRAPING (Obligatorio)
+# ========================================
+selenium==4.15.2
+beautifulsoup4==4.12.2
+
+# ========================================  
+# SUPABASE INTEGRATION (Obligatorio)
+# ========================================
+supabase==1.2.0
+postgrest==0.10.8
+storage3==0.5.4
+gotrue==1.0.1
+
+# ========================================
+# UTILITIES (Obligatorio)
+# ========================================
+python-dotenv==1.0.0
+
+# ========================================
+# HTTP CLIENT (Obligatorio para Supabase)
+# ========================================
+httpx[http2]==0.24.1
+
+# ========================================
+# OPTIONAL - Comentado para GitHub Actions
+# ========================================
+# pandas==2.1.1              # Solo para archivos CSV locales
+# lxml==4.9.3                # Parser XML alternativo  
+# webdriver-manager==4.0.1   # GitHub Actions instala Chrome manualmente
+# requests==2.31.0           # httpx es suficiente
+
+# ========================================
+# DEVELOPMENT ONLY (No para producción)
+# ========================================
+# pytest==7.4.2
+# black==23.7.0  
+# flake8==6.0.0

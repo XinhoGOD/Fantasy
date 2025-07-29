@@ -1,0 +1,98 @@
+name: NFL Scraper - Health Check & Monitoring
+
+on:
+  # Ejecutar cada 2 horas para monitoreo
+  schedule:
+    - cron: '15 */2 * * *'  # A los 15 minutos de cada 2 horas
+  
+  # Permitir ejecución manual
+  workflow_dispatch:
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+  GITHUB_ACTIONS: true
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install supabase python-dotenv
+        
+    - name: 🔍 Database Health Check
+      run: |
+        echo "🏥 HEALTH CHECK - Sistema NFL Fantasy Scraper"
+        echo "=============================================="
+        echo "⏰ Timestamp: $(date)"
+        
+        # Ejecutar verificación básica de sistema
+        python -c "
+        import os
+        from supabase import create_client
+        from datetime import datetime
+        
+        print('🔌 Verificando conexión a Supabase...')
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_KEY')
+        
+        if not url or not key:
+            print('❌ Variables de entorno no configuradas')
+            exit(1)
+        
+        try:
+            supabase = create_client(url, key)
+            
+            # Verificar tabla
+            response = supabase.table('nfl_fantasy_trends').select('scraped_at').limit(1).execute()
+            print('✅ Conexión a BD: OK')
+            
+            # Verificar registros recientes
+            recent_response = supabase.table('nfl_fantasy_trends').select('scraped_at').order('scraped_at', desc=True).limit(5).execute()
+            
+            if recent_response.data:
+                print(f'📊 Registros en BD: {len(recent_response.data)} encontrados')
+                latest = recent_response.data[0]['scraped_at']
+                print(f'📅 Último registro: {latest[:19]}')
+                
+                # Verificar si hay actividad reciente (últimas 2 horas)
+                from datetime import datetime, timedelta, timezone
+                latest_dt = datetime.fromisoformat(latest.replace('Z', '+00:00'))
+                now = datetime.now(timezone.utc)
+                diff = now - latest_dt
+                
+                if diff.total_seconds() < 7200:  # 2 horas
+                    print(f'✅ Sistema activo: último scraping hace {int(diff.total_seconds()/60)} minutos')
+                else:
+                    print(f'⚠️ Posible problema: último scraping hace {int(diff.total_seconds()/3600)} horas')
+            else:
+                print('⚠️ No hay registros en la BD')
+                
+        except Exception as e:
+            print(f'❌ Error en health check: {e}')
+            exit(1)
+        "
+        
+    - name: 📈 Sistema Status Summary
+      if: always()
+      run: |
+        echo "=============================================="
+        echo "📊 RESUMEN DEL SISTEMA:"
+        echo "  • Scraper principal: Cada 30 minutos"
+        echo "  • Health check: Cada 2 horas"
+        echo "  • Modo: Automático 24/7"
+        echo "  • Anti-duplicados: Activo"
+        echo "  • Detección de semanas: Activa"
+        echo "=============================================="

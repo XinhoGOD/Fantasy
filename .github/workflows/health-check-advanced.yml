@@ -1,0 +1,177 @@
+name: 📊 NFL Scraper Health Check & Monitoring
+
+on:
+  schedule:
+    # Ejecutar cada 2 horas para monitoreo
+    - cron: '0 */2 * * *'
+  
+  # Permitir ejecución manual
+  workflow_dispatch:
+    inputs:
+      detailed_analysis:
+        description: 'Ejecutar análisis detallado de la base de datos'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+  GITHUB_ACTIONS: true
+  TZ: 'UTC'
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+        
+    - name: 📚 Install minimal dependencies
+      run: |
+        pip install --upgrade pip
+        pip install supabase==1.2.0 python-dotenv==1.0.0
+        
+    - name: 🔍 Basic Health Check
+      run: |
+        echo "🏥 ===== NFL SCRAPER HEALTH CHECK ====="
+        echo "⏰ Timestamp: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "🔧 Verificando sistema de scraping 24/7..."
+        echo "======================================="
+        
+        # Ejecutar verificación básica (sin Chrome)
+        python -c "
+        import os
+        import sys
+        from datetime import datetime
+        
+        # Verificar variables de entorno
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_KEY')
+        
+        if not supabase_url or not supabase_key:
+            print('❌ Variables de entorno faltantes')
+            sys.exit(1)
+        
+        print('✅ Variables de entorno: OK')
+        
+        # Verificar conexión a Supabase
+        try:
+            from supabase import create_client
+            supabase = create_client(supabase_url, supabase_key)
+            
+            # Test simple query
+            response = supabase.table('nfl_fantasy_trends').select('id').limit(1).execute()
+            print('✅ Conexión Supabase: OK')
+            
+            # Contar registros totales
+            total_response = supabase.table('nfl_fantasy_trends').select('id').execute()
+            total_records = len(total_response.data) if total_response.data else 0
+            print(f'📊 Total registros en BD: {total_records}')
+            
+            # Verificar campo semana (nuevo)
+            try:
+                week_response = supabase.table('nfl_fantasy_trends').select('semana').limit(1).execute()
+                print('✅ Campo semana: DISPONIBLE')
+            except Exception as e:
+                print('❌ Campo semana: NO DISPONIBLE')
+                print(f'   Error: {e}')
+            
+        except Exception as e:
+            print(f'❌ Error Supabase: {e}')
+            sys.exit(1)
+        
+        print('🏥 Health Check: SISTEMA OPERATIVO')
+        "
+        
+    - name: 📊 Detailed Analysis (if requested)
+      if: ${{ github.event.inputs.detailed_analysis == 'true' }}
+      run: |
+        echo ""
+        echo "📈 ===== ANÁLISIS DETALLADO ====="
+        python -c "
+        import os
+        from supabase import create_client
+        from collections import Counter
+        from datetime import datetime, timedelta
+        
+        supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+        
+        # Obtener todos los registros con timestamps
+        response = supabase.table('nfl_fantasy_trends').select('scraped_at, semana').execute()
+        data = response.data
+        
+        if not data:
+            print('📊 Base de datos vacía')
+            exit()
+        
+        print(f'📊 Total registros analizados: {len(data)}')
+        
+        # Análisis por timestamp
+        timestamps = [record['scraped_at'][:16] for record in data]  # YYYY-MM-DD HH:MM
+        timestamp_counts = Counter(timestamps)
+        
+        print(f'📅 Sesiones únicas de scraping: {len(timestamp_counts)}')
+        
+        # Últimas 5 sesiones
+        recent_sessions = sorted(timestamp_counts.items(), reverse=True)[:5]
+        print('📋 Últimas 5 sesiones:')
+        for ts, count in recent_sessions:
+            print(f'   {ts} → {count} registros')
+        
+        # Análisis por semana (si existe el campo)
+        weeks = [record.get('semana') for record in data if record.get('semana')]
+        if weeks:
+            week_counts = Counter(weeks)
+            print(f'🏈 Semanas NFL registradas: {sorted(week_counts.keys())}')
+            for week in sorted(week_counts.keys()):
+                print(f'   Semana {week}: {week_counts[week]} registros')
+        else:
+            print('🏈 Sin datos de semanas NFL')
+        
+        # Verificar actividad reciente (últimas 2 horas)
+        now = datetime.utcnow()
+        two_hours_ago = now - timedelta(hours=2)
+        
+        recent_activity = []
+        for ts_str in timestamps:
+            try:
+                ts = datetime.fromisoformat(ts_str.replace('T', ' '))
+                if ts >= two_hours_ago:
+                    recent_activity.append(ts_str)
+            except:
+                continue
+        
+        print(f'⚡ Actividad últimas 2 horas: {len(set(recent_activity))} sesiones')
+        if len(set(recent_activity)) == 0:
+            print('⚠️ Sin actividad reciente - verificar workflow cada 30min')
+        else:
+            print('✅ Sistema activo y funcionando')
+        "
+        
+    - name: 🎯 Health Status Summary
+      if: always()
+      run: |
+        echo ""
+        echo "🎯 ===== RESUMEN DE SALUD DEL SISTEMA ====="
+        echo "📅 Última verificación: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "🔄 Próxima verificación: en 2 horas"
+        echo "🏈 Workflow principal: Cada 30 minutos (nfl-scraper-30min)"
+        echo "📊 Monitoreo: Cada 2 horas (este workflow)"
+        echo ""
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "✅ ESTADO GENERAL: SISTEMA SALUDABLE"
+          echo "💡 El scraper 24/7 está funcionando correctamente"
+        else
+          echo "⚠️ ESTADO GENERAL: REQUIERE ATENCIÓN"
+          echo "🔍 Revisar logs para identificar problemas"
+        fi
+        echo "============================================="

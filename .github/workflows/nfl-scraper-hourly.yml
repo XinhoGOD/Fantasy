@@ -1,0 +1,84 @@
+name: NFL Fantasy Backup Scraper (Hourly)
+
+on:
+  schedule:
+    # Ejecutar cada 4 horas como backup del sistema principal
+    - cron: '45 */4 * * *'  # A los 45 minutos de cada 4 horas
+  
+  # Permitir ejecución manual
+  workflow_dispatch:
+    inputs:
+      force_full_scraping:
+        description: 'Forzar scraping completo (sin detección de cambios)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  backup-nfl-scraping:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: 🌐 Install system dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y wget gnupg
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+        sudo apt-get update -qq
+        sudo apt-get install -y google-chrome-stable
+        
+    - name: 📚 Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🤖 Run NFL Fantasy Scraping (BACKUP MODE)
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        GITHUB_ACTIONS: true
+      run: |
+        echo "🏈 BACKUP NFL Fantasy Scraping"
+        echo "⏰ Timestamp: $(date)"
+        echo "� Modo: Backup (cada 4 horas)"
+        echo "================================"
+        python scrapper.py --auto
+        echo "================================"
+        echo "✅ Backup completado: $(date)"
+        
+    - name: Upload artifacts (if any data files were created)
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: nfl-fantasy-data-${{ github.run_number }}
+        path: |
+          nfl_fantasy_trends_*.json
+          nfl_fantasy_trends_*.csv
+        retention-days: 7
+        
+    - name: Log execution summary
+      if: always()
+      run: |
+        echo "📊 Ejecución completada"
+        echo "⏰ Fin: $(date)"
+        echo "🔄 Próxima ejecución: en 1 hora"
