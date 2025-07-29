@@ -481,6 +481,7 @@ class SupabaseManager:
         """
         🔥 NUEVA VERSIÓN: Detecta cambios comparando cada jugador con su último registro individual.
         🎯 ACTUALIZADO: Solo registra cambios en rostered/started, IGNORA adds/drops
+        🚨 CORREGIDO: Evita duplicados cuando NO hay cambios reales
         
         Args:
             new_data: Datos actuales del scraping
@@ -504,6 +505,7 @@ class SupabaseManager:
         changed_players = []
         new_players = []
         updated_players = []
+        skipped_players = []  # 🆕 Para trackear jugadores sin cambios
         
         self.logger.info(f"🔍 Comparando {len(new_data)} jugadores actuales con registros históricos individuales")
         
@@ -524,7 +526,8 @@ class SupabaseManager:
                     updated_players.append(player_name)
                     self.logger.debug(f"🔄 Cambios detectados en {player_name}")
                 else:
-                    self.logger.debug(f"✅ Sin cambios: {player_name}")
+                    skipped_players.append(player_name)
+                    self.logger.debug(f"⏭️ Sin cambios: {player_name} - OMITIDO")
             else:
                 # Jugador completamente nuevo (nunca antes registrado)
                 changed_players.append(new_player)
@@ -536,8 +539,16 @@ class SupabaseManager:
         self.logger.info(f"📈 Resultados de comparación individual ({comparison_scope}):")
         self.logger.info(f"   • Jugadores nuevos: {len(new_players)}")
         self.logger.info(f"   • Jugadores con cambios: {len(updated_players)}")
+        self.logger.info(f"   • Jugadores sin cambios (omitidos): {len(skipped_players)}")
         self.logger.info(f"   • Total a insertar: {len(changed_players)}")
         self.logger.info(f"   • Semana objetivo: {current_week}")
+        
+        # 🔍 Mostrar muestra de jugadores omitidos si hay muchos
+        if len(skipped_players) > 0:
+            sample_size = min(5, len(skipped_players))
+            self.logger.info(f"⏭️ Muestra de jugadores omitidos (sin cambios): {', '.join(skipped_players[:sample_size])}")
+            if len(skipped_players) > sample_size:
+                self.logger.info(f"    ... y {len(skipped_players) - sample_size} más omitidos")
         
         if new_players:
             self.logger.info(f"🆕 Nuevos jugadores: {', '.join(new_players[:5])}")
@@ -545,7 +556,7 @@ class SupabaseManager:
                 self.logger.info(f"    ... y {len(new_players) - 5} más")
         
         if updated_players:
-            self.logger.info(f"� Jugadores actualizados: {', '.join(updated_players[:5])}")
+            self.logger.info(f"🔄 Jugadores actualizados: {', '.join(updated_players[:5])}")
             if len(updated_players) > 5:
                 self.logger.info(f"    ... y {len(updated_players) - 5} más")
         
@@ -577,23 +588,36 @@ class SupabaseManager:
             old_val = old_player.get(field)
             new_val = new_player.get(field)
             
-            # Comparar valores (manejar None)
-            if old_val != new_val:
-                changes_detected.append({
-                    'field': field,
-                    'old_value': old_val,
-                    'new_value': new_val
-                })
+            # Comparar valores (manejar None y convertir a float para comparación precisa)
+            try:
+                old_val_float = float(old_val) if old_val is not None else None
+                new_val_float = float(new_val) if new_val is not None else None
+                
+                if old_val_float != new_val_float:
+                    changes_detected.append({
+                        'field': field,
+                        'old_value': old_val,
+                        'new_value': new_val
+                    })
+            except (ValueError, TypeError):
+                # Si no se pueden convertir a float, usar comparación directa
+                if old_val != new_val:
+                    changes_detected.append({
+                        'field': field,
+                        'old_value': old_val,
+                        'new_value': new_val
+                    })
         
         if changes_detected:
             player_name = new_player.get('player_name', 'Unknown')
             self.logger.info(f"🔄 Cambios detectados en {player_name}: {len(changes_detected)} campos modificados")
             for change in changes_detected:
                 self.logger.info(f"   • {change['field']}: {change['old_value']} → {change['new_value']}")
-            
-        return len(changes_detected) > 0
-            
-        return len(changes_detected) > 0
+            return True
+        else:
+            player_name = new_player.get('player_name', 'Unknown')
+            self.logger.debug(f"✅ Sin cambios en {player_name}")
+            return False
     
     def insert_changed_players_only(self, players_data: List[Dict[str, Any]]) -> bool:
         """
