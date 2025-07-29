@@ -3,7 +3,7 @@ name: 🏈 NFL Fantasy Scraper 24/7 - Cada 30 Minutos
 on:
   schedule:
     # Ejecutar cada 30 minutos, las 24 horas del día
-    - cron: '0,30 * * * *'  # En los minutos 0 y 30 de cada hora
+    - cron: '*/30 * * * *'  # Cada 30 minutos exactamente
   
   # Permitir ejecución manual desde GitHub UI
   workflow_dispatch:
