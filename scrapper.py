@@ -521,7 +521,7 @@ class SupabaseManager:
                 # Jugador existente - comparar con su último registro
                 previous_player = latest_by_player[player_id]
                 
-                if self.has_significant_changes(previous_player, new_player):
+                if self.has_ultra_sensitive_changes(previous_player, new_player):
                     changed_players.append(new_player)
                     updated_players.append(player_name)
                     self.logger.debug(f"🔄 Cambios detectados en {player_name}")
@@ -562,17 +562,17 @@ class SupabaseManager:
         
         return changed_players
     
-    def has_significant_changes(self, old_player: Dict[str, Any], new_player: Dict[str, Any]) -> bool:
+    def has_ultra_sensitive_changes(self, old_player: Dict[str, Any], new_player: Dict[str, Any]) -> bool:
         """
-        Determina si un jugador tuvo cambios significativos.
-        🔥 ACTUALIZADO: Solo detecta cambios en rostered/started, IGNORA adds/drops
+        Determina si un jugador tuvo CUALQUIER cambio por más mínimo que sea.
+        🔥 SÚPER SENSIBLE: Detecta cambios de 0.01% o cualquier diferencia en rostered/started
         
         Args:
             old_player: Datos anteriores del jugador
             new_player: Datos actuales del jugador
             
         Returns:
-            True si hay cambios significativos
+            True si hay CUALQUIER cambio por más mínimo que sea
         """
         # 🎯 CAMPOS ESPECÍFICOS: Solo rostered y started (ignora adds/drops)
         fields_to_check = [
@@ -588,31 +588,47 @@ class SupabaseManager:
             old_val = old_player.get(field)
             new_val = new_player.get(field)
             
-            # Comparar valores (manejar None y convertir a float para comparación precisa)
+            # 🔥 COMPARACIÓN SÚPER SENSIBLE: Detecta CUALQUIER diferencia
             try:
-                old_val_float = float(old_val) if old_val is not None else None
-                new_val_float = float(new_val) if new_val is not None else None
+                # Convertir a float con máxima precisión
+                old_val_float = float(old_val) if old_val is not None else 0.0
+                new_val_float = float(new_val) if new_val is not None else 0.0
                 
-                if old_val_float != new_val_float:
+                # Comparación exacta - CUALQUIER diferencia cuenta
+                if abs(old_val_float - new_val_float) > 0.0:
                     changes_detected.append({
                         'field': field,
                         'old_value': old_val,
-                        'new_value': new_val
+                        'new_value': new_val,
+                        'difference': round(new_val_float - old_val_float, 2)
                     })
             except (ValueError, TypeError):
                 # Si no se pueden convertir a float, usar comparación directa
-                if old_val != new_val:
+                if str(old_val).strip() != str(new_val).strip():
                     changes_detected.append({
                         'field': field,
                         'old_value': old_val,
-                        'new_value': new_val
+                        'new_value': new_val,
+                        'difference': 'N/A (text change)'
                     })
+        
+        # También verificar cambio de oponente (matchup)
+        old_opponent = old_player.get('opponent', '').strip()
+        new_opponent = new_player.get('opponent', '').strip()
+        if old_opponent != new_opponent:
+            changes_detected.append({
+                'field': 'opponent',
+                'old_value': old_opponent,
+                'new_value': new_opponent,
+                'difference': 'matchup change'
+            })
         
         if changes_detected:
             player_name = new_player.get('player_name', 'Unknown')
-            self.logger.info(f"🔄 Cambios detectados en {player_name}: {len(changes_detected)} campos modificados")
+            self.logger.info(f"🔄 CAMBIOS DETECTADOS en {player_name}: {len(changes_detected)} campos modificados")
             for change in changes_detected:
-                self.logger.info(f"   • {change['field']}: {change['old_value']} → {change['new_value']}")
+                diff_info = f" ({change['difference']})" if change['difference'] != 'N/A (text change)' else ""
+                self.logger.info(f"   • {change['field']}: {change['old_value']} → {change['new_value']}{diff_info}")
             return True
         else:
             player_name = new_player.get('player_name', 'Unknown')
@@ -1619,7 +1635,7 @@ def test_individual_comparison():
             print(f"   • Modificado: {modified_player['percent_rostered']}% rostered")
             
             # Probar detección de cambios
-            has_changes = sm.has_significant_changes(original_player, modified_player)
+            has_changes = sm.has_ultra_sensitive_changes(original_player, modified_player)
             print(f"   • ¿Cambio detectado?: {'✅ SÍ' if has_changes else '❌ NO'}")
         
         print(f"\n🎯 ANÁLISIS DE LA NUEVA LÓGICA:")
