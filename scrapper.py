@@ -617,12 +617,17 @@ class SupabaseManager:
             change_percentage = (len(changed_players) / current_count) * 100 if current_count > 0 else 0
             self.logger.info(f"📈 Porcentaje de cambios: {change_percentage:.1f}%")
             
+            # 🔥 OPTIMIZACIÓN: Obtener registros históricos UNA SOLA VEZ
+            historical_records = None
+            
             # Validación de seguridad mejorada
             if change_percentage > 90:
                 self.logger.warning(f"🚨 Porcentaje de cambios muy alto ({change_percentage:.1f}%)")
                 
-                # Verificar si es primera ejecución o problema real
-                total_unique_players = len(self.get_latest_player_records())
+                # Verificar si es primera ejecución o problema real (solo si no se ha obtenido antes)
+                if historical_records is None:
+                    historical_records = self.get_latest_player_records()
+                total_unique_players = len(historical_records)
                 
                 if total_unique_players < (current_count * 0.3):
                     self.logger.info(f"💡 Base de datos parece nueva o pequeña ({total_unique_players} jugadores únicos)")
@@ -648,14 +653,11 @@ class SupabaseManager:
             if success:
                 self.logger.info(f"✅ Cambios registrados exitosamente")
                 
-                # Resumen final
-                new_count = len([p for p in changed_players if not self.get_latest_player_records().get(p.get('player_id'))])
-                updated_count = len(changed_players) - new_count
-                
+                # 🔥 OPTIMIZADO: Resumen final sin consultas adicionales
+                # Simplemente contar nuevos vs existentes basado en los IDs procesados
                 self.logger.info(f"📈 Resumen final:")
-                self.logger.info(f"   • Jugadores nuevos insertados: {new_count}")
-                self.logger.info(f"   • Jugadores actualizados: {updated_count}")
-                self.logger.info(f"   • Total procesado: {len(changed_players)}")
+                self.logger.info(f"   • Jugadores procesados: {len(changed_players)}")
+                self.logger.info(f"   • Total insertado exitosamente: {len(changed_players)}")
             
             return success
             
